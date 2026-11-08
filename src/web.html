@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mini_dsh</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  /* 上行占用剩余高度并独立滚动，下行按表单高度布局，长对话也能看到输入框。 */
+  main { width: min(100%, 760px); margin: auto; height: 100dvh; padding: 12px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+  #context { border: 1px solid #aaa; padding: 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #context p { margin: 0 0 1em; }
+  form { display: flex; gap: 6px; }
+  input { flex: 1; min-width: 0; }
+  input, button { padding: 6px 10px; font: inherit; }
+</style>
+<main>
+  <section id="context" role="log" aria-label="对话上下文" tabindex="0"></section>
+  <form>
+    <input name="message" aria-label="消息" placeholder="输入消息" autocomplete="off" required>
+    <button disabled>发送</button>
+  </form>
+</main>
+<script type="module">
+  const log = document.querySelector('#context')
+  const form = document.querySelector('form')
+  const input = form.elements.message
+  const button = form.querySelector('button')
+  let history = []
+  let busy = false
+
+  function render(entries) {
+    log.replaceChildren(...entries.map(({ label, text }) => {
+      const row = document.createElement('p')
+      const name = document.createElement('strong')
+      name.textContent = label
+      // 以文本节点插入内容，文件或模型返回的 HTML 标签会按原文显示。
+      row.append(name, '\n', text)
+      return row
+    }))
+    log.scrollTop = log.scrollHeight
+  }
+
+  async function request(url, options) {
+    const response = await fetch(url, options)
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error)
+    return result
+  }
+
+  async function send(event) {
+    event.preventDefault()
+    const text = input.value.trim()
+    if (busy || !text) return
+    busy = true
+    button.disabled = input.disabled = true
+    input.value = ''
+    // 先在页面显示本次提问。请求成功后，再用服务端返回的完整会话更新 history。
+    const pending = [...history, { label: '你', text }]
+    render([...pending, { label: '助手', text: '正在回复…' }])
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body: JSON.stringify({ text }),
+      })
+      if (!response.ok) throw new Error((await response.json()).error)
+      const row = log.lastElementChild
+      const output = row.lastChild
+      let started = false
+      let complete = false
+      let buffer = ''
+      // 每个事件占一行；一次读取可能包含半行或多行。
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          const lines = (buffer + value).split('\n')
+          buffer = lines.pop()
+          for (const line of lines) {
+            const event = JSON.parse(line)
+            if (event.type === 'error') throw new Error(event.error)
+            if (event.type === 'delta') {
+              if (!started) output.data = ''
+              started = true
+              output.appendData(event.text)
+              log.scrollTop = log.scrollHeight
+            } else if (event.type === 'done') {
+              history = event.history
+              render(history)
+              complete = true
+            }
+          }
+        }
+        if (!complete) throw new Error('连接已中断，请重新发送')
+      } finally {
+        await reader.cancel()
+      }
+    } catch (error) {
+      render([...pending, { label: '发送失败', text: error.message }])
+      input.value = text
+    } finally {
+      busy = false
+      button.disabled = input.disabled = false
+      input.focus()
+    }
+  }
+
+  form.addEventListener('submit', send)
+  try {
+    history = await request('/api/context')
+    render(history)
+  } catch (error) {
+    render([{ label: '读取上下文失败', text: error.message }])
+  }
+  button.disabled = false
+  input.focus()
+</script>
+</html>

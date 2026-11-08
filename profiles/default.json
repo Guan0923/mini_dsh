@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    { "plugin": "../src/plugins/tools.ts" },
+    { "plugin": "../src/plugins/workspace-files.ts" },
+    { "plugin": "../src/plugins/list-dir.ts" },
+    { "plugin": "../src/plugins/read-file.ts" },
+    { "plugin": "../src/plugins/deepseek.ts" },
+    { "plugin": "../src/plugins/memory-session.ts" },
+    { "plugin": "../src/plugins/agent-loop.ts", "config": { "maxSteps": 12 } },
+    { "plugin": "../src/plugins/web.ts" }
+  ]
+}

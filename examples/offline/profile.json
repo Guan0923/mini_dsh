@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    { "plugin": "../../src/plugins/web.ts" },
+    { "plugin": "../../src/plugins/agent-loop.ts" },
+    { "plugin": "./model.ts" },
+    { "plugin": "../../src/plugins/memory-session.ts" },
+    { "plugin": "../../src/plugins/list-dir.ts" },
+    { "plugin": "../../src/plugins/workspace-files.ts" },
+    { "plugin": "../../src/plugins/tools.ts" }
+  ]
+}

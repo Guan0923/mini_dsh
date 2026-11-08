@@ -1,2 +1,12 @@
+# npm 安装的依赖和调试日志
 node_modules/
+npm-debug.log*
+
+# 本机模型配置和密钥，保留可提交的配置示例
 .env
+.env.*
+!.env.example
+
+# 本地测试覆盖率和 TypeScript 增量缓存
+coverage/
+*.tsbuildinfo

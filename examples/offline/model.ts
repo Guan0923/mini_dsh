@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../../src/kernel.ts'
 
 // 离线示例用两次模型调用演示一轮问答：先请求列目录，收到工具结果后再将它作为回答。
 export function apply(ctx: Context) {

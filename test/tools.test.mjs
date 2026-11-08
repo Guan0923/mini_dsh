@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { Context } from '@deepseek-ai/cordis'
+import { Context } from '../src/kernel.ts'
 import tools from '../src/plugins/tools.ts'
 import * as files from '../src/plugins/workspace-files.ts'
 import * as readFile from '../src/plugins/read-file.ts'

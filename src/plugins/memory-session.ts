@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../kernel.ts'
 import type { Message } from '../contracts.ts'
 
 export function apply(ctx: Context) {

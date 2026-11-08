@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件设置 · mini_dsh</title>
+<style>
+  main { max-width: 736px; margin: auto; padding: 12px; font-family: system-ui, sans-serif; }
+  label { display: block; margin-block: 12px; overflow-wrap: anywhere; }
+</style>
+<main>
+  <a href="/">返回对话</a>
+  <h1>插件设置</h1>
+  <p>开关对当前服务的所有会话生效，重启后按配置文件加载。</p>
+  <fieldset disabled><legend>插件列表</legend><div id="plugins"></div></fieldset>
+  <p role="status"></p>
+</main>
+<script type="module">
+  const field = document.querySelector('fieldset')
+  const list = document.querySelector('#plugins')
+  const status = document.querySelector('[role=status]')
+  const states = { active: '运行中', pending: '等待依赖', disposed: '已关闭', failed: '启动失败', loading: '启动中', unloading: '卸载中' }
+  async function request(options) {
+    const res = await fetch('/api/plugins', options)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+    return data
+  }
+  function render(rows) {
+    list.replaceChildren(...rows.map(row => {
+      const label = document.createElement('label')
+      const input = document.createElement('input')
+      input.type = 'checkbox'
+      input.checked = row.enabled
+      input.value = row.plugin
+      label.append(input, ' ' + row.plugin + ' · ' + states[row.state] + (row.missing.length ? '（' + row.missing.join('、') + '）' : ''))
+      return label
+    }))
+  }
+  field.addEventListener('change', async event => {
+    const input = event.target
+    field.disabled = true
+    status.textContent = '正在更新…'
+    try {
+      render(await request({ method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plugin: input.value, enabled: input.checked }) }))
+      status.textContent = '已更新'
+    } catch (error) {
+      input.checked = !input.checked
+      status.textContent = error.message
+      try { render(await request()) } catch { /* 保留错误信息，允许重试 */ }
+    } finally { field.disabled = false }
+  })
+  try { render(await request()); field.disabled = false } catch (error) { status.textContent = error.message }
+</script>
+</html>

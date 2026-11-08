@@ -1,7 +1,7 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../kernel.ts'
 import type { Message } from '../contracts.ts'
 
-// Cordis 在 model 和 tools 两个服务都就绪后才启动本插件。
+// 本地内核 在 model 和 tools 两个服务都就绪后才启动本插件。
 export const inject = ['model', 'tools']
 
 export function apply(ctx: Context, config: { maxSteps?: number; prompt?: string }) {
@@ -29,7 +29,6 @@ export function apply(ctx: Context, config: { maxSteps?: number; prompt?: string
         }
         for (const call of reply.tool_calls) {
           signal.throwIfAborted()
-          ctx.emit('agent/tool-call', call)
           const content = await ctx.tools.execute(call)
           // 一次回复可能包含多个调用；原样回传调用 ID，模型才能区分每份结果。
           turn.push({ role: 'tool', tool_call_id: call.id, content })

@@ -1,4 +1,4 @@
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context } from '../kernel.ts'
 import type { Tool, ToolCall } from '../contracts.ts'
 
 export default class ToolRegistry extends Service {
@@ -9,7 +9,7 @@ export default class ToolRegistry extends Service {
   }
 
   register(tool: Tool) {
-    // Cordis 将 this.ctx 绑定到调用 register 的插件；该插件卸载时会执行下面的删除操作。
+    // 本地内核 将 this.ctx 绑定到调用 register 的插件；该插件卸载时会执行下面的删除操作。
     return this.ctx.effect(() => {
       if (this.entries.has(tool.name)) throw new Error('工具名称冲突：' + tool.name)
       this.entries.set(tool.name, tool)

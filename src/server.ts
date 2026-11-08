@@ -12,7 +12,7 @@ async function main() {
   const defaultProfile = fileURLToPath(new URL('../profiles/default.json', import.meta.url))
   const runtime = await loadProfile(process.env.MINI_DSH_PROFILE || defaultProfile, process.env.MINI_DSH_CWD || '.')
   try {
-    console.log(await runtime.ctx.app.start())
+    console.log(await runtime.ctx.host.start())
     const stop = () => { void runtime.dispose() }
     process.once('SIGINT', stop)
     process.once('SIGTERM', stop)

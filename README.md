@@ -1,63 +1,91 @@
 # mini_dsh
 
-一个用 TypeScript 实现的、由插件组装的本地 Agent。插件运行时使用 DeepSeek 发布的 `@deepseek-ai/cordis` 4.1.0。模型、工具注册表、文件工具、会话、Agent 循环和网页都由配置选择。项目的规模和插件服务接口针对这个 mini 版本设计。[DeepSeek Harness 官方架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)
+[![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Node.js 24.12+](https://img.shields.io/badge/Node.js-24.12%2B-43853D?logo=nodedotjs&logoColor=white)](package.json)
+[![ESLint](https://img.shields.io/badge/ESLint-4B32C3?logo=eslint&logoColor=white)](eslint.config.js)
 
-## 运行
+一个可以边用边拆的 TypeScript Agent。打开网页，让它列出当前目录，再去设置里关掉目录工具。回到同一段对话，问同一个问题，你就能看见这个开关究竟改变了什么。
 
-需要 Node.js 24.12 或更高版本。首次运行前在项目目录执行 `npm.cmd ci`。设置模型密钥后运行 `npm.cmd start`，浏览器打开 [本机网页](http://127.0.0.1:4317)。在底部输入消息，按回车或点击发送。内容框显示问题、助手回答、工具调用和工具结果。刷新页面可以继续当前浏览器的会话，重启服务会清空内存历史。
+mini_dsh 把 DeepSeek Harness 的插件化思路做成了一个可以本地运行、从头读懂的项目。聊天页面背后，模型、工具和会话各自由插件提供。负责启动插件、等待依赖、撤销工具注册的内核也在仓库里。想弄清一个 Agent 如何获得或失去一种能力，可以从一次真实的工具调用一路追到管理它的 Fiber。
+
+## 第一次运行：让一个工具消失，再把它加回来
+
+准备 **Node.js 24.12 或更高版本**，在项目根目录打开 PowerShell。下面的示例在本地运行，体验工具调用只需要安装项目依赖。
 
 ```powershell
-npm.cmd start
+npm.cmd ci
+$env:MINI_DSH_PROFILE = 'examples/offline/profile.json'
+npm.cmd run dev
 ```
 
-离线体验可在启动服务前设置 `$env:MINI_DSH_PROFILE = 'examples/offline/profile.json'`。这个示例固定调用 `list_dir(".")`，把真实目录列表作为回答。默认工作目录是启动服务时所在的目录；`MINI_DSH_CWD` 可指定其他项目。`MINI_DSH_PORT` 可更改监听端口。
+1. 打开[聊天页](http://127.0.0.1:4317/)，输入「当前目录有什么？」。页面会显示工具调用 `list_dir`、参数 `{"path":"."}` 和你机器上的真实目录内容。
+2. 打开[插件设置](http://127.0.0.1:4317/settings)，关闭 `list-dir.ts`。返回对话再问一次，这次会收到「当前配置未启用 list_dir。」
+3. 重新开启 `list-dir.ts`，再问一次。目录工具立即恢复，前两轮对话也还在。
 
-服务启动时读取项目根目录的 `.env`。在其中设置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL` 和 `DEEPSEEK_BASE_URL`，修改后重启服务生效。启动进程已有的环境变量优先于文件值。DeepSeek 插件中的显式 `model` 和 `baseUrl` 配置优先于环境变量。
+这里用的是一个行为固定的[离线模型插件](examples/offline/model.ts)。它每轮都会检查 Agent 提供的工具清单，因此同一个问题可以稳定地演示开关前后的区别。你还可以试着关闭 `workspace-files.ts`：这次目录插件的开关依然开启，状态却变成了「等待依赖」。重新启用文件服务后，它会自动恢复。
 
-## 一次启动如何组装
+## 开关背后发生了什么？
 
-`src/server.ts` 加载 `MINI_DSH_PROFILE` 指定的配置，默认使用 `profiles/default.json`。插件路径相对于配置文件解析。启动器等待依赖就绪后调用 `app.start()`，网页插件在本机回环地址提供页面和会话接口。
+目录插件声明自己需要 `files` 和 `tools` 两项服务。配置加载器调用 `ctx.plugin()` 时，内核为**这一次挂载**创建一个 Fiber。依赖就绪后，Fiber 执行插件的 `apply(ctx)`，目录插件才把 `list_dir` 注册进工具表。下面这几处源码正好能串起整个过程。
 
-| 服务 | 默认插件 | 用途 |
-| --- | --- | --- |
-| `ctx.app` | `web.ts` | 提供网页，接收消息并展示会话上下文 |
-| `ctx.agent` | `agent-loop.ts` | 组织模型请求和工具调用，一轮成功后提交消息 |
-| `ctx.model` | `deepseek.ts` | 请求 DeepSeek，保留工具 ID 和思考字段 |
-| `ctx.sessions` | `memory-session.ts` | 创建独立的内存会话 |
-| `ctx.tools` | `tools.ts` | 管理工具声明及执行，并随所属插件卸载撤销注册 |
-| `ctx.files` | `workspace-files.ts` | 校验参数，解析相对路径和链接，检查目录边界 |
+| 你在页面上看到的事 | 可以跟进去看的代码 |
+| --- | --- |
+| 设置里多了一个已挂载的插件 | 配置加载器导入模块并保存 Fiber 句柄。[profile.ts](src/profile.ts) |
+| 「等待依赖」变成「运行中」 | Fiber 的 `activate()` 查找服务提供者并执行插件入口。[kernel.ts](src/kernel.ts) |
+| 发出问题后，模型调用 `list_dir` | Agent 读取当时的工具清单，将调用交给工具表执行，再把结果带回模型。[agent-loop.ts](src/plugins/agent-loop.ts) |
+| 关闭插件后，工具从清单中消失 | 注册工具时，`ctx.effect()` 把删除操作交给调用方的 Fiber；卸载会执行这项清理。[tools.ts](src/plugins/tools.ts) |
 
-`list-dir.ts` 和 `read-file.ts` 分别向 `ctx.tools` 注册一个工具，共用 `ctx.files`。配置中的插件声明 `inject` 依赖，提供者可以出现在消费者之后。修改 profile 后重启生效。嵌入使用时，`loadProfile()` 返回插件句柄，可用 `mounts.get(配置中的路径).dispose()` 卸载单个插件，并用 `runtime.dispose()` 释放整个组合。
+插件开关对当前服务的所有会话生效，重启后重新读取配置。聊天页的「清理上下文」只清理当前浏览器会话。消息保存在内存里，重启进程、关闭网页插件或关闭会话插件都会释放已有会话。
 
-## 编写一个工具插件
+## 接入模型，试一次跨文件问答
 
-在 profile 旁新建 `project-name.mjs`，把 `{ "plugin": "./project-name.mjs" }` 加入该 profile 的 `plugins` 数组。
+切回默认配置后，可以问：「读一下 README，找出开发启动命令，再检查 package.json 里有没有对应的脚本。」默认配置同时启用列目录和读文件工具。页面会逐步显示模型返回的正文，并在本轮完成后展示工具调用、参数和结果。
 
-```js
+在项目根目录的 `.env` 中填入网关信息。模型插件会在基础地址后追加 `/chat/completions`。
+
+```dotenv
+DEEPSEEK_BASE_URL=https://your-gateway.example/v1
+DEEPSEEK_MODEL=your-model-id
+DEEPSEEK_API_KEY=your-api-key
+```
+
+如果刚才运行了离线示例，按 `Ctrl+C` 停止服务，在同一 PowerShell 窗口执行：
+
+```powershell
+Remove-Item Env:MINI_DSH_PROFILE -ErrorAction SilentlyContinue
+npm.cmd run dev
+```
+
+默认插件组合在 [profiles/default.json](profiles/default.json)。要让工具读取另一个项目，可以在启动前设置 `$env:MINI_DSH_CWD`。端口由 `MINI_DSH_PORT` 指定，默认是 `4317`。
+
+## 加一个自己的工具
+
+例如，让模型能回答「这个工作目录叫什么？」。新建 `src/plugins/project-name.ts`：
+
+```ts
 import path from 'node:path'
+import type { Context } from '../kernel.ts'
 
-export const inject = ['tools', 'workspace']
+export const inject = ['workspace', 'tools']
 
-export function apply(ctx) {
+export function apply(ctx: Context) {
   ctx.tools.register({
     name: 'project_name',
-    description: '返回当前项目目录的名称',
+    description: '返回当前工作目录的名称',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     execute: () => path.basename(ctx.workspace),
   })
 }
 ```
 
-工具的参数说明和执行函数来自同一次注册。插件卸载时，两者同时移除。扩展事件用 `ctx.on('agent/tool-call', listener)`；监听器也随所属插件移除。所有插件作为本地 Node.js 模块执行，配置中应使用可信代码。
+在默认配置的 `plugins` 数组中加入 `{ "plugin": "../src/plugins/project-name.ts" }`，重启后即可在设置页找到它。模型会在下一次请求中收到新的工具说明。想换模型、会话存储或 Agent 循环时，可以从它们各自的[服务接口](src/contracts.ts)入手。
 
-要替换模型、会话或 Agent 循环，将 profile 中对应条目的模块路径换成你的实现，并提供同名服务。服务的 TypeScript 接口在 `src/contracts.ts`。离线示例的 `examples/offline/model.ts` 演示了最小模型插件。默认文件读取上限为 32 KiB，目录列表上限为 200 项。Agent 循环的 `config.maxSteps` 控制单轮请求次数，默认 12。
+## 开发命令
 
-## 验证
-
-```powershell
-npm.cmd run lint
-npm.cmd run check
-npm.cmd test
-```
-
-测试使用模拟 HTTP 模型与临时项目，覆盖网页多步读取、刷新恢复上下文、浏览器会话隔离、外部插件、配置禁用、卸载清理、失败回滚和文件访问边界。
+| 命令 | 用途 |
+| --- | --- |
+| `npm.cmd run dev` | 开发启动，已加载的 TypeScript 模块变化后自动重启 |
+| `npm.cmd start` | 普通启动 |
+| `npm.cmd run lint` | 检查代码规则 |
+| `npm.cmd run check` | 检查 TypeScript 类型 |
+| `npm.cmd test` | 运行插件生命周期、文件工具和 Web 对话测试 |

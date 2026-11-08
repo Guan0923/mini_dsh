@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../kernel.ts'
 import { open, stat } from 'node:fs/promises'
 import { pathParameter } from '../path-parameter.ts'
 import { modelEnvFile } from '../model-env.ts'

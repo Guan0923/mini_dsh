@@ -7,7 +7,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, sans-serif; }
   /* 上行占用剩余高度并独立滚动，下行按表单高度布局，长对话也能看到输入框。 */
-  main { width: min(100%, 760px); margin: auto; height: 100dvh; padding: 12px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+  main { width: min(100%, 760px); margin: auto; height: 100dvh; padding: 12px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
   #context { border: 1px solid #aaa; padding: 12px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
   #context p { margin: 0 0 1em; }
   form { display: flex; gap: 6px; }
@@ -15,6 +15,7 @@
   input, button { padding: 6px 10px; font: inherit; }
 </style>
 <main>
+  <nav><a href="/settings">设置</a> <button type="button" id="clear" disabled>清理上下文</button> <span role="status"></span></nav>
   <section id="context" role="log" aria-label="对话上下文" tabindex="0"></section>
   <form>
     <input name="message" aria-label="消息" placeholder="输入消息" autocomplete="off" required>
@@ -22,6 +23,8 @@
   </form>
 </main>
 <script type="module">
+  const clear = document.querySelector('#clear')
+  const status = document.querySelector('[role=status]')
   const log = document.querySelector('#context')
   const form = document.querySelector('form')
   const input = form.elements.message
@@ -53,7 +56,8 @@
     const text = input.value.trim()
     if (busy || !text) return
     busy = true
-    button.disabled = input.disabled = true
+    clear.disabled = button.disabled = input.disabled = true
+    status.textContent = ''
     input.value = ''
     // 先在页面显示本次提问。请求成功后，再用服务端返回的完整会话更新 history。
     const pending = [...history, { label: '你', text }]
@@ -100,11 +104,22 @@
       input.value = text
     } finally {
       busy = false
-      button.disabled = input.disabled = false
+      clear.disabled = button.disabled = input.disabled = false
       input.focus()
     }
   }
 
+  clear.addEventListener('click', async () => {
+    if (busy) return
+    busy = true
+    clear.disabled = button.disabled = true
+    try {
+      history = await request('/api/context', { method: 'DELETE' })
+      render(history)
+      status.textContent = '当前会话已清空'
+    } catch (error) { status.textContent = error.message }
+    finally { busy = false; clear.disabled = button.disabled = false; input.focus() }
+  })
   form.addEventListener('submit', send)
   try {
     history = await request('/api/context')
@@ -112,7 +127,7 @@
   } catch (error) {
     render([{ label: '读取上下文失败', text: error.message }])
   }
-  button.disabled = false
+  clear.disabled = button.disabled = false
   input.focus()
 </script>
 </html>

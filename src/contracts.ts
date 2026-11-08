@@ -1,4 +1,4 @@
-import '@deepseek-ai/cordis'
+import './kernel.ts'
 
 /** 模型发起一次工具调用时给出 id，执行结果通过 tool_call_id 与该调用配对。 */
 export interface ToolCall {
@@ -37,7 +37,7 @@ export interface Transcript {
 }
 
 // 在这里声明插件共享的服务类型；运行时由各插件调用 ctx.provide 或通过 Service 注册。
-declare module '@deepseek-ai/cordis' {
+declare module './kernel.ts' {
   interface Context {
     workspace: string
     files: { resolve(args: unknown): Promise<string> }
@@ -49,10 +49,7 @@ declare module '@deepseek-ai/cordis' {
     model: { complete(messages: Message[], tools: ToolSchema[], signal: AbortSignal, onText?: (text: string) => void): Promise<AssistantMessage> }
     sessions: { open(): Transcript }
     agent: { ask(session: Transcript, question: string, onText?: (text: string) => void, signal?: AbortSignal): Promise<string> }
-    app: { start(): Promise<string> }
-  }
-
-  interface Events {
-    'agent/tool-call'(call: ToolCall): void
+    host: { start(): Promise<string> }
+    app: { handle: import('./host.ts').Handler }
   }
 }

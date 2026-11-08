@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../kernel.ts'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 

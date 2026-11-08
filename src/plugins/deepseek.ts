@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '../kernel.ts'
 import { createInterface } from 'node:readline'
 import { Readable } from 'node:stream'
 import type { AssistantMessage, ToolCall } from '../contracts.ts'
@@ -17,8 +17,7 @@ function isToolCall(value: unknown): value is ToolCall {
 
 // 网关用 SSE 传输增量。按行解码后再按空行分帧，避免网络分包截断中文或 JSON。
 async function readStream(response: Response, onText: (text: string) => void) {
-  if (!response.body) throw new Error('模型响应为空')
-  const source = Readable.from(response.body)
+  const source = Readable.from(response.body!)
   source.setEncoding('utf8')
   const lines = createInterface({ input: source, crlfDelay: Infinity })
   const message: AssistantMessage = { role: 'assistant', content: null }
@@ -63,11 +62,11 @@ async function readStream(response: Response, onText: (text: string) => void) {
   return { finish_reason, message }
 }
 
-export function apply(ctx: Context, config: { model?: string; baseUrl?: string }) {
+export function apply(ctx: Context) {
   const key = process.env.DEEPSEEK_API_KEY?.trim()
-  const model = config.model ?? process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'
-  const baseUrl = config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
-  const endpoint = new URL(baseUrl.replace(/\/$/, '') + '/chat/completions')
+  const model = process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'
+  const baseUrl = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
+  const endpoint = new URL(baseUrl + '/chat/completions')
   const complete: Context['model']['complete'] = async (messages, schemas, signal, onText) => {
     if (!key) throw new Error('请在本机配置 DEEPSEEK_API_KEY 后重启服务。')
     // 注册表使用通用工具描述，在发请求前包装成聊天接口要求的 function 格式。

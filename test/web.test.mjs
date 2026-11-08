@@ -91,6 +91,8 @@ test('Web app follows project references, preserves tool history and recovers af
   // 模型尚未获准结束，网页接口必须已经收到第一片正文。
   try {
     assert.deepEqual(JSON.parse((await events.next()).value), { type: 'delta', text: '运行' })
+    const busyClear = await fetch(url + '/api/context', { method: 'DELETE', headers: { cookie } })
+    assert.equal(busyClear.status, 409)
   } finally {
     release.resolve()
   }
@@ -123,4 +125,28 @@ test('Web app follows project references, preserves tool history and recovers af
   assert.match(JSON.parse(results[1].content).content, /docs\/start.md/)
   assert.match(JSON.parse(results[2].content).error, /ENOENT/)
   assert.equal(JSON.parse(results[3].content).content, '运行 npm run orchard')
+  // 第二个浏览器清理自己的会话，不会影响第一个浏览器的消息。
+  const other = await fetch(url + '/api/context')
+  const otherCookie = other.headers.get('set-cookie').split(';')[0]
+  const clear = id => fetch(url + '/api/context', { method: 'DELETE', headers: { cookie: id } })
+  assert.deepEqual(await (await clear(otherCookie)).json(), [])
+  assert.deepEqual(await (await fetch(url + '/api/context', { headers: { cookie } })).json(), latest)
+  assert.deepEqual(await (await clear(cookie)).json(), [])
+  assert.deepEqual(await (await fetch(url + '/api/context', { headers: { cookie } })).json(), [])
+  const toggle = async (name, enabled) => {
+    const res = await fetch(url + '/api/plugins', { method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ plugin: '../src/plugins/' + name + '.ts', enabled }) })
+    assert.equal(res.status, 200)
+    return res.json()
+  }
+  const paused = await toggle('deepseek', false)
+  assert.deepEqual(paused.find(row => row.plugin.endsWith('/agent-loop.ts')).missing, ['model'])
+  assert.equal((await send('离线')).status, 503)
+  const resumed = await toggle('deepseek', true)
+  assert.equal(resumed.find(row => row.plugin.endsWith('/agent-loop.ts')).state, 'active')
+  await toggle('web', false)
+  assert.equal((await fetch(url)).url, url + '/settings')
+  await toggle('web', true)
+  assert.match(await (await fetch(url)).text(), /清理上下文/)
+
 })

@@ -10,3 +10,7 @@ npm-debug.log*
 # 本地测试覆盖率和 TypeScript 增量缓存
 coverage/
 *.tsbuildinfo
+
+# 本地项目记忆（dsh-project-memory 的索引与任务），不随仓库提交
+.dsh-project-memory/
+.dsh-project-memory
